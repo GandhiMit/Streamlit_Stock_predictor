@@ -1,6 +1,6 @@
 import streamlit as st
 
-from  keras._tf_keras.keras.models import Model, load_model
+from  keras._tf_keras.keras.models import Model
 from  keras._tf_keras.keras.layers import (
     LSTM, Dense, Multiply, Input, AdditiveAttention, Flatten
 )
@@ -84,12 +84,12 @@ def run_model():
     X_train = np.reshape(X_train, (X_train.shape[0], X_train.shape[1], 1))
     X_test = np.reshape(X_test, (X_test.shape[0], X_test.shape[1], 1))
 
-    model_filename = f"{company}_model_PT_{price_type}_Prediction_day_{prediction_days}.h5"
+    # model_filename = f"{company}_model_PT_{price_type}_Prediction_day_{prediction_days}.h5"
 
-    if os.path.exists(model_filename):
-        st.info(f"Found existing model for {company}. Loading the model...")
-        model = load_model(model_filename)
-    else:
+    # if os.path.exists(model_filename):
+    #     st.info(f"Found existing model for {company}. Loading the model...")
+    #     model = load_model(model_filename)
+    # else:
         input_layer = Input(shape=(X_train.shape[1], 1))
         lstm_out = LSTM(50, return_sequences=True)(input_layer)
         lstm_out = LSTM(50, return_sequences=True)(lstm_out)
@@ -111,9 +111,9 @@ def run_model():
         history = model.fit(X_train, y_train, epochs=100, batch_size=25, validation_split=0.2,
                             callbacks=[early_stopping])
 
-        if save_model:
-            model.save(model_filename)
-            st.success(f"Model saved as {model_filename}")
+        # if save_model:
+        #     model.save(model_filename)
+        #     st.success(f"Model saved as {model_filename}")
 
     test_loss = model.evaluate(X_test, y_test)
     y_pred = model.predict(X_test)

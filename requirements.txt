@@ -119,7 +119,6 @@ python-dateutil==2.8.2
 python-json-logger==2.0.7
 pytz==2024.1
 tensorflow==2.16.1
-tensorflow-estimator==2.16.1
 tensorflow-intel==2.16.1
 tensorflow-io-gcs-filesystem==0.31.0
 PyYAML==6.0.1

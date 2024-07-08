@@ -58,7 +58,7 @@ def generate_prediction_dates(start_date, num_days):
 
 
 def run_model():
-    @st.cache
+    @st.cache_data
     def load_data(company, start, end):
         return yf.download(company, start=start, end=end)
 

@@ -63,7 +63,7 @@ def run_model():
     #     return yf.download(company, start=start, end=end)
 
     # data = load_data(company, start_date, end_date)
-    data = yf.download(company, start=start_date, end=end_date)
+    data = yf.download(company, start=start_date, end=end_date, progress=False)
 
     if data.isnull().sum().any():
         data.fillna(method="ffill", inplace=True)

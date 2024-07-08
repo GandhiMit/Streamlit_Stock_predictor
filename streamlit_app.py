@@ -90,26 +90,26 @@ def run_model():
     #     st.info(f"Found existing model for {company}. Loading the model...")
     #     model = load_model(model_filename)
     # else:
-        input_layer = Input(shape=(X_train.shape[1], 1))
-        lstm_out = LSTM(50, return_sequences=True)(input_layer)
-        lstm_out = LSTM(50, return_sequences=True)(lstm_out)
+    input_layer = Input(shape=(X_train.shape[1], 1))
+    lstm_out = LSTM(50, return_sequences=True)(input_layer)
+    lstm_out = LSTM(50, return_sequences=True)(lstm_out)
 
-        query = Dense(50)(lstm_out)
-        value = Dense(50)(lstm_out)
-        attention_out = AdditiveAttention()([query, value])
+    query = Dense(50)(lstm_out)
+    value = Dense(50)(lstm_out)
+    attention_out = AdditiveAttention()([query, value])
 
-        multiply_layer = Multiply()([lstm_out, attention_out])
+    multiply_layer = Multiply()([lstm_out, attention_out])
 
-        flatten_layer = Flatten()(multiply_layer)
-        output_layer = Dense(1)(flatten_layer)
+    flatten_layer = Flatten()(multiply_layer)
+    output_layer = Dense(1)(flatten_layer)
 
-        model = Model(inputs=input_layer, outputs=output_layer)
-        model.compile(optimizer="adam", loss="mean_squared_error")
-        model.summary()
+    model = Model(inputs=input_layer, outputs=output_layer)
+    model.compile(optimizer="adam", loss="mean_squared_error")
+    model.summary()
 
-        early_stopping = EarlyStopping(monitor="val_loss", patience=10)
-        history = model.fit(X_train, y_train, epochs=100, batch_size=25, validation_split=0.2,
-                            callbacks=[early_stopping])
+    early_stopping = EarlyStopping(monitor="val_loss", patience=10)
+    history = model.fit(X_train, y_train, epochs=100, batch_size=25, validation_split=0.2,
+                        callbacks=[early_stopping])
 
         # if save_model:
         #     model.save(model_filename)

@@ -69,7 +69,7 @@ jupyterlab==4.0.12
 jupyterlab-pygments==0.3.0
 jupyterlab-server==2.25.2
 jupyterlab-widgets==3.0.10
-keras == 3.3.3
+keras == 3.4.1
 kiwisolver==1.4.5
 libclang==16.0.6
 lxml==5.2.2

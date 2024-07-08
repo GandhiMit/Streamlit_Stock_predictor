@@ -1,8 +1,8 @@
 import streamlit as st
-import tensorflow as tf
+
 from  keras._tf_keras.keras.models import Model, load_model
 from  keras._tf_keras.keras.layers import (
-    LSTM, Dense, Multiply, Input, AdditiveAttention
+    LSTM, Dense, Multiply, Input, AdditiveAttention, Flatten
 )
 from sklearn.preprocessing import MinMaxScaler
 from  keras._tf_keras.keras.callbacks import EarlyStopping
@@ -100,7 +100,7 @@ def run_model():
 
         multiply_layer = Multiply()([lstm_out, attention_out])
 
-        flatten_layer = tf.keras.layers.Flatten()(multiply_layer)
+        flatten_layer = Flatten()(multiply_layer)
         output_layer = Dense(1)(flatten_layer)
 
         model = Model(inputs=input_layer, outputs=output_layer)

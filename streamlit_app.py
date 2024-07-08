@@ -59,10 +59,11 @@ def generate_prediction_dates(start_date, num_days):
 
 def run_model():
     @st.cache_data
-    def load_data(company, start, end):
-        return yf.download(company, start=start, end=end)
+    # def load_data(company, start, end):
+    #     return yf.download(company, start=start, end=end)
 
-    data = load_data(company, start_date, end_date)
+    # data = load_data(company, start_date, end_date)
+    data = yf.download(company, start=start_date, end=end_date)
 
     if data.isnull().sum().any():
         data.fillna(method="ffill", inplace=True)

@@ -17,6 +17,7 @@ from transformers import TFAutoModel
 import os
 import time
 import traceback
+import shutil
 
 # Hugging Face login
 hf_token = st.secrets["HF_TOKEN"]  # Store your Hugging Face token in Streamlit secrets
@@ -57,36 +58,58 @@ def generate_prediction_dates(start_date, num_days):
         current_date += timedelta(days=1)
     return dates
 
+from huggingface_hub import HfApi, Repository
+import os
+import shutil
+
 def save_model_to_huggingface(model, model_name):
     # Save the model locally first
     model.save(model_name)
     
-    repo_id = "Finforbes/Stock_predictor"
+    repo_id = "Finforbes/Stock_models"
     
-    # Try to create the repository (this will do nothing if it already exists)
+    # Clone the repository locally
+    local_dir = "Stock_models_repo"
     try:
-        create_repo(repo_id, repo_type="model", token=hf_token)
-        st.success(f"Repository created or already exists: {repo_id}")
+        repo = Repository(local_dir=local_dir, clone_from=repo_id, use_auth_token=hf_token)
+        st.success(f"Repository cloned: {repo_id}")
     except Exception as e:
-        st.warning(f"Repository creation failed (it might already exist): {str(e)}")
-    
-    # Upload the model to Hugging Face
-    try:
-        api = HfApi(token=hf_token)
-        api.upload_folder(
-            folder_path=model_name,
-            repo_id=repo_id,
-            repo_type="model",
-            token=hf_token
-        )
-        st.success(f"Model uploaded to Hugging Face: {repo_id}")
-    except Exception as e:
-        st.error(f"Error uploading model to Hugging Face: {str(e)}")
+        st.error(f"Error cloning repository: {str(e)}")
         st.error(f"Detailed error: {traceback.format_exc()}")
+        return
+
+    # Copy the model to the cloned repository
+    try:
+        model_dir = os.path.join(local_dir, model_name)
+        if os.path.exists(model_dir):
+            shutil.rmtree(model_dir)
+        shutil.copytree(model_name, model_dir)
+    except Exception as e:
+        st.error(f"Error copying model to repository: {str(e)}")
+        st.error(f"Detailed error: {traceback.format_exc()}")
+        return
+
+    # Push the changes
+    try:
+        repo.git_add(auto_lfs_track=True)
+        repo.git_commit(f"Add/Update model: {model_name}")
+        repo.git_push()
+        st.success(f"Model uploaded to Hugging Face: {repo_id}/{model_name}")
+    except Exception as e:
+        st.error(f"Error pushing changes to Hugging Face: {str(e)}")
+        st.error(f"Detailed error: {traceback.format_exc()}")
+
+    # Clean up local files
+    try:
+        shutil.rmtree(local_dir)
+        shutil.rmtree(model_name)
+        st.success(f"Local files cleaned up")
+    except Exception as e:
+        st.warning(f"Error cleaning up local files: {str(e)}")
 
 def load_model_from_huggingface(model_name):
     try:
-        repo_id = "Finforbes/Stock_predictor"
+        repo_id = "Finforbes/Stock_models"
         model = TFAutoModel.from_pretrained(f"{repo_id}/{model_name}", token=hf_token)
         st.success(f"Model loaded from Hugging Face: {repo_id}/{model_name}")
         return model

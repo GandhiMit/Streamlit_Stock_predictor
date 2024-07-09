@@ -170,73 +170,73 @@ def run_model():
     model_name = f"{company}_model_PT_{price_type}"
     
     model = None
+    # try:
+    #     st.info(f"Attempting to load model from Hugging Face: {model_name}")
+    #     model = load_model_from_huggingface(model_name)
+    #     if model is None:
+    #         raise Exception("Model not found or failed to load")
+    #     st.success("Model loaded successfully from Hugging Face")
+    # except Exception as e:
+    #     st.warning(f"Could not load existing model: {str(e)}. Creating a new one.")
+    #     model = None
+
+    # if model is None:
+    input_layer = Input(shape=(X_train.shape[1], 1))
+    lstm_out = LSTM(50, return_sequences=True)(input_layer)
+    lstm_out = LSTM(50, return_sequences=True)(lstm_out)
+
+    query = Dense(50)(lstm_out)
+    value = Dense(50)(lstm_out)
+    attention_out = AdditiveAttention()([query, value])
+
+    multiply_layer = Multiply()([lstm_out, attention_out])
+
+    flatten_layer = Flatten()(multiply_layer)
+    output_layer = Dense(1)(flatten_layer)
+
+    model = Model(inputs=input_layer, outputs=output_layer)
+    model.compile(optimizer="adam", loss="mean_squared_error")
+    
+    # try:
+    #     st.info("Model summary:")
+    #     with st.empty():
+    #         summary_string = []
+    #         model.summary(print_fn=lambda x: summary_string.append(x))
+    #         st.text("\n".join(summary_string))
+    # except Exception as e:
+    #     st.warning(f"Unable to print model summary: {str(e)}")
+
+    early_stopping = EarlyStopping(monitor="val_loss", patience=10)
+    
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+
+    class StreamlitCallback(tf.keras.callbacks.Callback):
+        def on_epoch_end(self, epoch, logs=None):
+            progress = (epoch + 1) / 100
+            progress_bar.progress(progress)
+            status_text.text(f"Training progress: {int(progress * 100)}%")
+
     try:
-        st.info(f"Attempting to load model from Hugging Face: {model_name}")
-        model = load_model_from_huggingface(model_name)
-        if model is None:
-            raise Exception("Model not found or failed to load")
-        st.success("Model loaded successfully from Hugging Face")
+        with st.spinner('Training the model...'):
+            history = model.fit(
+                X_train, y_train,
+                epochs=100,
+                batch_size=25,
+                validation_split=0.2,
+                callbacks=[early_stopping, StreamlitCallback()],
+                verbose=0
+            )
+        st.success("Model training completed!")
     except Exception as e:
-        st.warning(f"Could not load existing model: {str(e)}. Creating a new one.")
-        model = None
+        st.error(f"Error during model training: {str(e)}")
+        return
 
-    if model is None:
-        input_layer = Input(shape=(X_train.shape[1], 1))
-        lstm_out = LSTM(50, return_sequences=True)(input_layer)
-        lstm_out = LSTM(50, return_sequences=True)(lstm_out)
-
-        query = Dense(50)(lstm_out)
-        value = Dense(50)(lstm_out)
-        attention_out = AdditiveAttention()([query, value])
-
-        multiply_layer = Multiply()([lstm_out, attention_out])
-
-        flatten_layer = Flatten()(multiply_layer)
-        output_layer = Dense(1)(flatten_layer)
-
-        model = Model(inputs=input_layer, outputs=output_layer)
-        model.compile(optimizer="adam", loss="mean_squared_error")
-        
-        try:
-            st.info("Model summary:")
-            with st.empty():
-                summary_string = []
-                model.summary(print_fn=lambda x: summary_string.append(x))
-                st.text("\n".join(summary_string))
-        except Exception as e:
-            st.warning(f"Unable to print model summary: {str(e)}")
-
-        early_stopping = EarlyStopping(monitor="val_loss", patience=10)
-        
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-
-        class StreamlitCallback(tf.keras.callbacks.Callback):
-            def on_epoch_end(self, epoch, logs=None):
-                progress = (epoch + 1) / 100
-                progress_bar.progress(progress)
-                status_text.text(f"Training progress: {int(progress * 100)}%")
-
-        try:
-            with st.spinner('Training the model...'):
-                history = model.fit(
-                    X_train, y_train,
-                    epochs=100,
-                    batch_size=25,
-                    validation_split=0.2,
-                    callbacks=[early_stopping, StreamlitCallback()],
-                    verbose=0
-                )
-            st.success("Model training completed!")
-        except Exception as e:
-            st.error(f"Error during model training: {str(e)}")
-            return
-
-        if save_model:
-            try:
-                save_model_to_huggingface(model, model_name)
-            except Exception as e:
-                st.error(f"Error saving model to Hugging Face: {str(e)}")
+        # if save_model:
+        #     try:
+        #         save_model_to_huggingface(model, model_name)
+        #     except Exception as e:
+        #         st.error(f"Error saving model to Hugging Face: {str(e)}")
 
     # Model evaluation
     try:

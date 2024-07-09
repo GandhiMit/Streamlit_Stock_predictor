@@ -62,15 +62,8 @@ def save_model_to_huggingface(model, model_name):
     # Save the model locally first
     model.save(model_name)
     
-    # Modify the repo_id format
-    repo_id = f"Finforbes/{model_name}"
-    
-    # Create the repository if it doesn't exist
-    try:
-        create_repo(repo_id, repo_type="model", token=hf_token)
-        st.success(f"Created new repository: {repo_id}")
-    except Exception as e:
-        st.warning(f"Repository creation failed (it might already exist): {str(e)}")
+    # Use the existing repository
+    repo_id = "Finforbes/Stock_predictor"
     
     # Upload the model to Hugging Face
     try:
@@ -83,12 +76,11 @@ def save_model_to_huggingface(model, model_name):
         st.success(f"Model uploaded to Hugging Face: {repo_id}")
     except Exception as e:
         st.error(f"Error uploading model to Hugging Face: {str(e)}")
-
 def load_model_from_huggingface(model_name):
     try:
-        repo_id = f"Finforbes/{model_name}"
-        model = TFAutoModel.from_pretrained(repo_id)
-        st.success(f"Model loaded from Hugging Face: {repo_id}")
+        repo_id = "Finforbes/Stock_predictor"
+        model = TFAutoModel.from_pretrained(f"{repo_id}/{model_name}")
+        st.success(f"Model loaded from Hugging Face: {repo_id}/{model_name}")
         return model
     except Exception as e:
         st.error(f"Error loading model from Hugging Face: {e}")

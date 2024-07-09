@@ -1,11 +1,8 @@
 import streamlit as st
-
-from  keras._tf_keras.keras.models import Model, load_model
-from  keras._tf_keras.keras.layers import (
-    LSTM, Dense, Multiply, Input, AdditiveAttention, Flatten
-)
 from sklearn.preprocessing import MinMaxScaler
-from  keras._tf_keras.keras.callbacks import EarlyStopping
+from tensorflow.keras.models import Model, load_model
+from tensorflow.keras.layers import LSTM, Dense, Multiply, Input, AdditiveAttention, Flatten
+from tensorflow.keras.callbacks import EarlyStopping
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 import pandas as pd
 import yfinance as yf

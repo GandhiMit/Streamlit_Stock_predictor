@@ -1,5 +1,4 @@
 import streamlit as st
-st.write("started")
 import pandas as pd
 import numpy as np
 import yfinance as yf
@@ -23,9 +22,9 @@ DEFAULT_PREDICTION_DAYS = 20
 # User inputs
 asset_type = st.selectbox("Asset Type", ["Stock", "Cryptocurrency"])
 company = st.text_input("Company/Crypto Symbol", value=DEFAULT_COMPANY)
-start_date = st.date_input("Start Date for Training Data", value=DEFAULT_START_DATE)
-end_date = st.date_input("End Date for Training Data", value=DEFAULT_END_DATE)
-factor = st.number_input("Training Batch size", value=DEFAULT_FACTOR)
+start_date = DEFAULT_START_DATE
+end_date =  DEFAULT_END_DATE
+factor = DEFAULT_FACTOR
 price_type = st.selectbox("Price Type", ["Open", "Close", "High", "Low"])
 prediction_days = st.number_input("Number of days to predict", value=DEFAULT_PREDICTION_DAYS, min_value=1, max_value=365)
 

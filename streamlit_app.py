@@ -10,7 +10,7 @@ import tensorflow as tf
 from tensorflow.keras.models import Model, load_model
 from tensorflow.keras.layers import LSTM, Dense, Input, AdditiveAttention, Flatten, Multiply
 from tensorflow.keras.callbacks import EarlyStopping
-from huggingface_hub import HfApi
+from huggingface_hub import HfApi, create_repo, RepositoryNotFoundError
 import os
 import shutil
 import traceback
@@ -55,14 +55,21 @@ def generate_prediction_dates(start_date, num_days):
     return dates
 
 def save_model_to_huggingface(model, model_name):
-    repo_id = "Finforbes/Stock_models"
+    repo_id = "Finforbes/stock_models"  # Use the correct repo_id here
     
     try:
+        api = HfApi()
+        
+        # Create the repository if it doesn't exist
+        try:
+            api.repo_info(repo_id)
+        except RepositoryNotFoundError:
+            create_repo(repo_id=repo_id, token=hf_token, private=False)
+        
         # Save the model locally
         model.save(model_name)
         
         # Upload the model files
-        api = HfApi()
         api.upload_folder(
             folder_path=model_name,
             repo_id=repo_id,
@@ -80,7 +87,7 @@ def save_model_to_huggingface(model, model_name):
 
 def load_model_from_huggingface(model_name):
     try:
-        repo_id = "Finforbes/Stock_models"
+        repo_id = "Finforbes/stock_models"
         api = HfApi()
         model_files = api.list_repo_files(repo_id=repo_id, repo_type="model")
         if model_name in model_files:
@@ -206,21 +213,16 @@ def run_model():
                 callbacks=[early_stopping, StreamlitCallback()],
                 verbose=0
             )
-        st.success("Model training completed!")
+        st.success("Model training completed successfully!")
     except Exception as e:
         st.error(f"Error during model training: {str(e)}")
         return
 
     if save_model:
-        try:
-            save_model_to_huggingface(model, model_name)
-        except Exception as e:
-            st.error(f"Error saving model to Hugging Face: {str(e)}")
+        save_model_to_huggingface(model, model_name)
 
-    # Model evaluation
     try:
-        with st.spinner('Evaluating model...'):
-            test_loss = model.evaluate(X_test, y_test, verbose=0)
+        test_loss = model.evaluate(X_test, y_test, verbose=0)
         st.success(f"Test Loss: {test_loss}")
     except Exception as e:
         st.error(f"Error during model evaluation: {str(e)}")

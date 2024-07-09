@@ -253,65 +253,65 @@ def run_model():
     #     st.write(f"Root Mean Square Error: {rmse}")
 
     # Continue with predictions
-    try:
-        prediction_data = safe_download(company, start_date_prediction, end_date_prediction)
-        st.write("Latest Stock/Crypto Data for Prediction")
-        st.write(prediction_data.tail())
+    
+    prediction_data = safe_download(company, start_date_prediction, end_date_prediction)
+    st.write("Latest Stock/Crypto Data for Prediction")
+    st.write(prediction_data.tail())
 
-        closing_prices = prediction_data[price_type].values
-        scaled_data = scaler.fit_transform(closing_prices.reshape(-1, 1))
-        X_latest = np.array([scaled_data[-factor:].reshape(factor)])
-        X_latest = np.reshape(X_latest, (X_latest.shape[0], X_latest.shape[1], 1))
+    closing_prices = prediction_data[price_type].values
+    scaled_data = scaler.fit_transform(closing_prices.reshape(-1, 1))
+    X_latest = np.array([scaled_data[-factor:].reshape(factor)])
+    X_latest = np.reshape(X_latest, (X_latest.shape[0], X_latest.shape[1], 1))
 
-        predicted_stock_price = model.predict(X_latest, batch_size=1)
-        predicted_stock_price = scaler.inverse_transform(predicted_stock_price)
+    predicted_stock_price = model.predict(X_latest, batch_size=1)
+    predicted_stock_price = scaler.inverse_transform(predicted_stock_price)
 
-        st.write("Predicted Price for the next day: ", predicted_stock_price[0][0])
+    st.write("Predicted Price for the next day: ", predicted_stock_price[0][0])
 
-        predicted_prices = make_predictions(model, X_latest, scaler, prediction_days)
-        if predicted_prices is None:
-            st.error("Failed to make predictions.")
-            return
+    predicted_prices = make_predictions(model, X_latest, scaler, prediction_days)
+    if predicted_prices is None:
+        st.error("Failed to make predictions.")
+        return
 
-        last_date = prediction_data.index[-1]
-        next_day = last_date + timedelta(days=1)
-        prediction_dates = generate_prediction_dates(next_day, prediction_days)
-        predictions_df = pd.DataFrame(index=prediction_dates, data=predicted_prices, columns=[price_type])
+    last_date = prediction_data.index[-1]
+    next_day = last_date + timedelta(days=1)
+    prediction_dates = generate_prediction_dates(next_day, prediction_days)
+    predictions_df = pd.DataFrame(index=prediction_dates, data=predicted_prices, columns=[price_type])
 
-        plt.figure(figsize=(12, 6))
-        plt.plot(prediction_data.index[-factor:], prediction_data[price_type][-factor:], linestyle="-", marker="o", color="blue", label="Actual Data")
-        plt.plot(prediction_dates, predicted_prices, linestyle="-", marker="o", color="red", label="Predicted Data")
+    plt.figure(figsize=(12, 6))
+    plt.plot(prediction_data.index[-factor:], prediction_data[price_type][-factor:], linestyle="-", marker="o", color="blue", label="Actual Data")
+    plt.plot(prediction_dates, predicted_prices, linestyle="-", marker="o", color="red", label="Predicted Data")
 
-        for i, price in enumerate(prediction_data[price_type][-factor:]):
-            plt.annotate(f'{price:.2f}', (prediction_data.index[-factor:][i], price), textcoords="offset points", xytext=(0, 10), ha='center')
+    for i, price in enumerate(prediction_data[price_type][-factor:]):
+        plt.annotate(f'{price:.2f}', (prediction_data.index[-factor:][i], price), textcoords="offset points", xytext=(0, 10), ha='center')
 
-        for i, price in enumerate(predicted_prices):
-            plt.annotate(f'{price:.2f}', (prediction_dates[i], price), textcoords="offset points", xytext=(0, 10), ha='center')
+    for i, price in enumerate(predicted_prices):
+        plt.annotate(f'{price:.2f}', (prediction_dates[i], price), textcoords="offset points", xytext=(0, 10), ha='center')
 
-        plt.title(f"{company} Price: Last {factor} Days and Next {prediction_days} Days Predicted")
-        plt.xlabel("Date")
-        plt.ylabel("Price")
-        plt.legend()
-        plt.xticks(rotation=45)
-        plt.tight_layout()
-        st.pyplot(plt)
+    plt.title(f"{company} Price: Last {factor} Days and Next {prediction_days} Days Predicted")
+    plt.xlabel("Date")
+    plt.ylabel("Price")
+    plt.legend()
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    st.pyplot(plt)
 
-        plt.figure(figsize=(12, 6))
-        plt.plot(prediction_dates, predicted_prices, linestyle="-", marker="o", color="red", label="Predicted Data")
+    plt.figure(figsize=(12, 6))
+    plt.plot(prediction_dates, predicted_prices, linestyle="-", marker="o", color="red", label="Predicted Data")
 
-        for i, price in enumerate(predicted_prices):
-            plt.annotate(f'{price:.2f}', (prediction_dates[i], price), textcoords="offset points", xytext=(0, 10), ha='center')
+    for i, price in enumerate(predicted_prices):
+        plt.annotate(f'{price:.2f}', (prediction_dates[i], price), textcoords="offset points", xytext=(0, 10), ha='center')
 
-        plt.title(f"{company} Predicted Prices for Next {prediction_days} Days")
-        plt.xlabel("Date")
-        plt.ylabel("Predicted Price")
-        plt.legend()
-        plt.xticks(rotation=45)
-        plt.tight_layout()
-        st.pyplot(plt)
+    plt.title(f"{company} Predicted Prices for Next {prediction_days} Days")
+    plt.xlabel("Date")
+    plt.ylabel("Predicted Price")
+    plt.legend()
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    st.pyplot(plt)
 
-    except Exception as e:
-        st.error(f"Error during prediction: {str(e)}")
+    # except Exception as e:
+    #     st.error(f"Error during prediction: {str(e)}")
 
     st.success("Prediction process completed!")
 

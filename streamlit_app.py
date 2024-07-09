@@ -292,7 +292,7 @@ def run_model():
         plt.tight_layout()
         st.pyplot(plt)
 
-      except Exception as e:
+    except Exception as e:
         st.error(f"Error during prediction: {str(e)}")
 
     # Add this at the end of the run_model function

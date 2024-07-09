@@ -252,14 +252,9 @@ def run_model():
             current_batch = np.append(current_batch[:, 1:, :], next_prediction_reshaped, axis=1)
             predicted_prices.append(scaler.inverse_transform(next_prediction)[0, 0])
 
-        # ... (rest of the plotting code remains the same)
+      
 
-    except Exception as e:
-        st.error(f"Error during prediction: {str(e)}")
-
-    # Add this at the end of the run_model function
-    st.success("Prediction process completed!")
-
+  
         last_date = prediction_data.index[-1]
         next_day = last_date + timedelta(days=1)
         prediction_dates = generate_prediction_dates(next_day, prediction_days)

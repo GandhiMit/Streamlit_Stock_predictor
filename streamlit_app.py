@@ -1,48 +1,49 @@
 import streamlit as st
-from sklearn.preprocessing import MinMaxScaler
-from tensorflow.keras.models import Model, load_model
-from tensorflow.keras.layers import LSTM, Dense, Multiply, Input, AdditiveAttention, Flatten
-from tensorflow.keras.callbacks import EarlyStopping
-from sklearn.metrics import mean_absolute_error, mean_squared_error
 import pandas as pd
-import yfinance as yf
 import numpy as np
+import yfinance as yf
 from datetime import date, timedelta
 import matplotlib.pyplot as plt
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.metrics import mean_absolute_error, mean_squared_error
+import tensorflow as tf
+from tensorflow.keras.models import Model, load_model
+from tensorflow.keras.layers import LSTM, Dense, Input, AdditiveAttention, Flatten, Multiply
+from tensorflow.keras.callbacks import EarlyStopping
+from huggingface_hub import HfApi, HfFolder
+from huggingface_hub import login
+from transformers import TFAutoModel
 import os
+
+# Hugging Face login
+hf_token = st.secrets["HF_TOKEN"]  # Store your Hugging Face token in Streamlit secrets
+login(token=hf_token)
 
 st.title("Stock Price Prediction")
 
 # Default values
 DEFAULT_COMPANY = "TCS.NS"
 DEFAULT_START_DATE = date(2020, 1, 1)
-DEFAULT_END_DATE =  date.today()
+DEFAULT_END_DATE = date.today()
 DEFAULT_START_DATE_PREDICTION = date(2024, 3, 7)
-DEFAULT_END_DATE_PREDICTION =  date.today()
+DEFAULT_END_DATE_PREDICTION = date.today()
 DEFAULT_FACTOR = 28
 DEFAULT_PREDICTION_DAYS = 20
 
 # User inputs
 asset_type = st.selectbox("Asset Type", ["Stock", "Cryptocurrency"])
 company = st.text_input("Company/Crypto Symbol", value=DEFAULT_COMPANY)
-# start_date = st.date_input("Start Date for Training Data", value=DEFAULT_START_DATE)
-# end_date = st.date_input("End Date for Training Data", value=DEFAULT_END_DATE)
-# start_date_prediction = st.date_input("Start Date for Prediction Data", value=DEFAULT_START_DATE_PREDICTION)
-# end_date_prediction = st.date_input("End Date for Prediction Data", value=DEFAULT_END_DATE_PREDICTION)
-start_date =DEFAULT_START_DATE
+start_date = DEFAULT_START_DATE
 end_date = DEFAULT_END_DATE
 start_date_prediction = DEFAULT_START_DATE_PREDICTION
 end_date_prediction = DEFAULT_END_DATE_PREDICTION
 
-st.write("Validate that the batch_size is not more then 28 units")
+st.write("Validate that the batch_size is not more than 28 units")
 factor = st.number_input("Training Batch size", value=DEFAULT_FACTOR)
-
 
 price_type = st.selectbox("Price Type", ["Open", "Close", "High", "Low"])
 save_model = st.checkbox("Save model after training", value=True)
-prediction_days = st.number_input("Number of days to predict", value=DEFAULT_PREDICTION_DAYS, min_value=1,
-                                  max_value=365)
-
+prediction_days = st.number_input("Number of days to predict", value=DEFAULT_PREDICTION_DAYS, min_value=1, max_value=365)
 
 def generate_prediction_dates(start_date, num_days):
     dates = []
@@ -53,39 +54,35 @@ def generate_prediction_dates(start_date, num_days):
         current_date += timedelta(days=1)
     return dates
 
-# def tradingview_widget(symbol):
-#     widget_html = f"""
-#     <div class="tradingview-widget-container" style="height:600px;width:600px">
-#       <div id="tradingview_chart" style="height:100%;width:100%"></div>
-#       <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-#       <script type="text/javascript">
-#       new TradingView.widget({{
-#         "width": 800,
-#         "height": 600,
-#         "symbol": "{symbol}",
-#         "interval": "D",
-#         "timezone": "Etc/UTC",
-#         "theme": "dark",
-#         "style": "1",
-#         "locale": "en",
-#         "toolbar_bg": "#f1f3f6",
-#         "enable_publishing": false,
-#         "allow_symbol_change": true,
-#         "container_id": "tradingview_chart"
-#       }});
-#       </script>
-#     </div>
-#     """
-#     return widget_html
+def save_model_to_huggingface(model, model_name):
+    # Save the model locally first
+    model.save(model_name)
+    
+    # Upload the model to Hugging Face
+    api = HfApi()
+    api.upload_folder(
+        folder_path=model_name,
+        repo_id=f"your-huggingface-username/{model_name}",
+        repo_type="model",
+    )
+    st.success(f"Model uploaded to Hugging Face: your-huggingface-username/{model_name}")
+
+def load_model_from_huggingface(model_name):
+    try:
+        model = TFAutoModel.from_pretrained(f"your-huggingface-username/{model_name}")
+        st.success(f"Model loaded from Hugging Face: your-huggingface-username/{model_name}")
+        return model
+    except Exception as e:
+        st.error(f"Error loading model from Hugging Face: {e}")
+        return None
 
 def run_model():
-    # # Display TradingView widget
-    # st.subheader(f"TradingView Chart for {company}")
-    # tradingview_html = tradingview_widget(company)
-    # components.html(tradingview_html, height=620, width=820)
-
     # Data Loader
     data = yf.download(company, start=start_date, end=end_date)
+
+    if data.empty:
+        st.error("No data available for the selected company and date range.")
+        return
 
     if data.isnull().sum().any():
         data.fillna(method="ffill", inplace=True)
@@ -107,36 +104,36 @@ def run_model():
     X_train = np.reshape(X_train, (X_train.shape[0], X_train.shape[1], 1))
     X_test = np.reshape(X_test, (X_test.shape[0], X_test.shape[1], 1))
 
-    # model_filename = f"{company}_model_PT_{price_type}.h5"
+    model_name = f"{company}_model_PT_{price_type}"
+    
+    # Try to load the model from Hugging Face
+    model = load_model_from_huggingface(model_name)
+    
+    if model is None:
+        # If the model doesn't exist on Hugging Face, create and train a new one
+        input_layer = Input(shape=(X_train.shape[1], 1))
+        lstm_out = LSTM(50, return_sequences=True)(input_layer)
+        lstm_out = LSTM(50, return_sequences=True)(lstm_out)
 
-    # if os.path.exists(model_filename):
-    #     st.info(f"Found existing model for {company}. Loading the model...")
-    #     model = load_model(model_filename)
-    # else:
-    input_layer = Input(shape=(X_train.shape[1], 1))
-    lstm_out = LSTM(50, return_sequences=True)(input_layer)
-    lstm_out = LSTM(50, return_sequences=True)(lstm_out)
+        query = Dense(50)(lstm_out)
+        value = Dense(50)(lstm_out)
+        attention_out = AdditiveAttention()([query, value])
 
-    query = Dense(50)(lstm_out)
-    value = Dense(50)(lstm_out)
-    attention_out = AdditiveAttention()([query, value])
+        multiply_layer = Multiply()([lstm_out, attention_out])
 
-    multiply_layer = Multiply()([lstm_out, attention_out])
+        flatten_layer = Flatten()(multiply_layer)
+        output_layer = Dense(1)(flatten_layer)
 
-    flatten_layer = Flatten()(multiply_layer)
-    output_layer = Dense(1)(flatten_layer)
+        model = Model(inputs=input_layer, outputs=output_layer)
+        model.compile(optimizer="adam", loss="mean_squared_error")
+        model.summary()
 
-    model = Model(inputs=input_layer, outputs=output_layer)
-    model.compile(optimizer="adam", loss="mean_squared_error")
-    model.summary()
+        early_stopping = EarlyStopping(monitor="val_loss", patience=10)
+        history = model.fit(X_train, y_train, epochs=100, batch_size=25, validation_split=0.2,
+                            callbacks=[early_stopping])
 
-    early_stopping = EarlyStopping(monitor="val_loss", patience=10)
-    history = model.fit(X_train, y_train, epochs=100, batch_size=25, validation_split=0.2,
-                        callbacks=[early_stopping])
-
-        # if save_model:
-        #     model.save(model_filename)
-        #     st.success(f"Model saved as {model_filename}")
+        if save_model:
+            save_model_to_huggingface(model, model_name)
 
     test_loss = model.evaluate(X_test, y_test)
     y_pred = model.predict(X_test)
@@ -149,11 +146,11 @@ def run_model():
     st.write(f"Mean Absolute Error: {mae}")
     st.write(f"Root Mean Square Error: {rmse}")
 
-    data = yf.download(company, start=start_date_prediction, end=end_date_prediction)
+    prediction_data = yf.download(company, start=start_date_prediction, end=end_date_prediction)
     st.write("Latest Stock/Crypto Data for Prediction")
-    st.write(data.tail())
+    st.write(prediction_data.tail())
 
-    closing_prices = data[price_type].values
+    closing_prices = prediction_data[price_type].values
     scaled_data = scaler.fit_transform(closing_prices.reshape(-1, 1))
     X_latest = np.array([scaled_data[-factor:].reshape(factor)])
     X_latest = np.reshape(X_latest, (X_latest.shape[0], X_latest.shape[1], 1))
@@ -172,32 +169,20 @@ def run_model():
         current_batch = np.append(current_batch[:, 1:, :], next_prediction_reshaped, axis=1)
         predicted_prices.append(scaler.inverse_transform(next_prediction)[0, 0])
 
-    # st.write(f"Predicted Prices for the next {prediction_days} days: ", predicted_prices)
-
-    last_date = data.index[-1]
+    last_date = prediction_data.index[-1]
     next_day = last_date + timedelta(days=1)
     prediction_dates = generate_prediction_dates(next_day, prediction_days)
     predictions_df = pd.DataFrame(index=prediction_dates, data=predicted_prices, columns=[price_type])
 
-    # st.subheader("Predicted Prices with Dates")
-    # st.write(predictions_df)
-
-    # st.subheader("Price Prediction")
-    # combined_data = pd.concat([data[price_type], predictions_df[price_type]])
-    # combined_data = combined_data[-(factor + prediction_days):]
-
     plt.figure(figsize=(12, 6))
-    plt.plot(data.index[-factor:], data[price_type][-factor:], linestyle="-", marker="o", color="blue",
-             label="Actual Data")
+    plt.plot(prediction_data.index[-factor:], prediction_data[price_type][-factor:], linestyle="-", marker="o", color="blue", label="Actual Data")
     plt.plot(prediction_dates, predicted_prices, linestyle="-", marker="o", color="red", label="Predicted Data")
 
-    for i, price in enumerate(data[price_type][-factor:]):
-        plt.annotate(f'{price:.2f}', (data.index[-factor:][i], price), textcoords="offset points", xytext=(0, 10),
-                     ha='center')
+    for i, price in enumerate(prediction_data[price_type][-factor:]):
+        plt.annotate(f'{price:.2f}', (prediction_data.index[-factor:][i], price), textcoords="offset points", xytext=(0, 10), ha='center')
 
     for i, price in enumerate(predicted_prices):
-        plt.annotate(f'{price:.2f}', (prediction_dates[i], price), textcoords="offset points", xytext=(0, 10),
-                     ha='center')
+        plt.annotate(f'{price:.2f}', (prediction_dates[i], price), textcoords="offset points", xytext=(0, 10), ha='center')
 
     plt.title(f"{company} Price: Last {factor} Days and Next {prediction_days} Days Predicted")
     plt.xlabel("Date")
@@ -211,8 +196,7 @@ def run_model():
     plt.plot(prediction_dates, predicted_prices, linestyle="-", marker="o", color="red", label="Predicted Data")
 
     for i, price in enumerate(predicted_prices):
-        plt.annotate(f'{price:.2f}', (prediction_dates[i], price), textcoords="offset points", xytext=(0, 10),
-                     ha='center')
+        plt.annotate(f'{price:.2f}', (prediction_dates[i], price), textcoords="offset points", xytext=(0, 10), ha='center')
 
     plt.title(f"{company} Predicted Prices for Next {prediction_days} Days")
     plt.xlabel("Date")
@@ -222,6 +206,6 @@ def run_model():
     plt.tight_layout()
     st.pyplot(plt)
 
-if st.button("OK"):
+if st.button("Run Prediction"):
     with st.spinner('Training the model...'):
         run_model()

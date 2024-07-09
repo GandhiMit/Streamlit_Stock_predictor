@@ -246,11 +246,11 @@ def run_model():
     except Exception as e:
         st.error(f"Error during model evaluation: {str(e)}")
 
-    # Alternative performance metrics
-    mae, rmse = calculate_performance_metrics(model, X_test, y_test)
-    if mae is not None and rmse is not None:
-        st.write(f"Mean Absolute Error: {mae}")
-        st.write(f"Root Mean Square Error: {rmse}")
+    # # Alternative performance metrics
+    # mae, rmse = calculate_performance_metrics(model, X_test, y_test)
+    # if mae is not None and rmse is not None:
+    #     st.write(f"Mean Absolute Error: {mae}")
+    #     st.write(f"Root Mean Square Error: {rmse}")
 
     # Continue with predictions
     try:

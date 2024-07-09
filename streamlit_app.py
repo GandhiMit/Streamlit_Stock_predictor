@@ -149,7 +149,7 @@ def run_model():
     st.write(f"Mean Absolute Error: {mae}")
     st.write(f"Root Mean Square Error: {rmse}")
 
-    data = load_data(company, start_date_prediction, end_date_prediction)
+    data = yf.download(company, start=start_date_prediction, end=end_date_prediction)
     st.write("Latest Stock/Crypto Data for Prediction")
     st.write(data.tail())
 

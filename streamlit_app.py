@@ -7,17 +7,11 @@ import matplotlib.pyplot as plt
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 import tensorflow as tf
-from tensorflow.keras.models import Model, load_model
+from tensorflow.keras.models import Model
 from tensorflow.keras.layers import LSTM, Dense, Input, AdditiveAttention, Flatten, Multiply
 from tensorflow.keras.callbacks import EarlyStopping
-from huggingface_hub import HfApi, create_repo, RepositoryNotFoundError
-import os
-import shutil
 import traceback
 import time
-
-# Hugging Face login
-hf_token = st.secrets["HF_TOKEN"]  # Store your Hugging Face token in Streamlit secrets
 
 st.title("Stock Price Prediction")
 
@@ -42,7 +36,6 @@ st.write("Validate that the batch_size is not more than 28 units")
 factor = st.number_input("Training Batch size", value=DEFAULT_FACTOR)
 
 price_type = st.selectbox("Price Type", ["Open", "Close", "High", "Low"])
-save_model = st.checkbox("Save model after training", value=True)
 prediction_days = st.number_input("Number of days to predict", value=DEFAULT_PREDICTION_DAYS, min_value=1, max_value=365)
 
 def generate_prediction_dates(start_date, num_days):
@@ -53,55 +46,6 @@ def generate_prediction_dates(start_date, num_days):
             dates.append(current_date)
         current_date += timedelta(days=1)
     return dates
-
-def save_model_to_huggingface(model, model_name):
-    repo_id = "Finforbes/stock_models"  # Use the correct repo_id here
-    
-    try:
-        api = HfApi()
-        
-        # Create the repository if it doesn't exist
-        try:
-            api.repo_info(repo_id)
-        except RepositoryNotFoundError:
-            create_repo(repo_id=repo_id, token=hf_token, private=False)
-        
-        # Save the model locally
-        model.save(model_name)
-        
-        # Upload the model files
-        api.upload_folder(
-            folder_path=model_name,
-            repo_id=repo_id,
-            repo_type="model",
-            ignore_patterns=["*.h5"],
-        )
-        st.success(f"Model uploaded to Hugging Face: {repo_id}/{model_name}")
-    except Exception as e:
-        st.error(f"Error saving model to Hugging Face: {str(e)}")
-        st.error(f"Detailed error: {traceback.format_exc()}")
-    finally:
-        # Clean up local files
-        if os.path.exists(model_name):
-            shutil.rmtree(model_name)
-
-def load_model_from_huggingface(model_name):
-    try:
-        repo_id = "Finforbes/stock_models"
-        api = HfApi()
-        model_files = api.list_repo_files(repo_id=repo_id, repo_type="model")
-        if model_name in model_files:
-            api.hf_hub_download(repo_id=repo_id, filename=model_name, local_dir=".", repo_type="model")
-            model = load_model(model_name)
-            st.success(f"Model loaded from Hugging Face: {repo_id}/{model_name}")
-            return model
-        else:
-            st.warning(f"Model {model_name} not found in repository {repo_id}")
-            return None
-    except Exception as e:
-        st.error(f"Error loading model from Hugging Face: {e}")
-        st.error(f"Detailed error: {traceback.format_exc()}")
-        return None
 
 def safe_download(company, start_date, end_date, max_retries=3, delay=5):
     for attempt in range(max_retries):
@@ -172,10 +116,6 @@ def run_model():
     X_train = np.reshape(X_train, (X_train.shape[0], X_train.shape[1], 1))
     X_test = np.reshape(X_test, (X_test.shape[0], X_test.shape[1], 1))
 
-    model_name = f"{company}_model_PT_{price_type}"
-    
-    model = None
-
     input_layer = Input(shape=(X_train.shape[1], 1))
     lstm_out = LSTM(50, return_sequences=True)(input_layer)
     lstm_out = LSTM(50, return_sequences=True)(lstm_out)
@@ -217,9 +157,6 @@ def run_model():
     except Exception as e:
         st.error(f"Error during model training: {str(e)}")
         return
-
-    if save_model:
-        save_model_to_huggingface(model, model_name)
 
     try:
         test_loss = model.evaluate(X_test, y_test, verbose=0)

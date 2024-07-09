@@ -10,18 +10,14 @@ import tensorflow as tf
 from tensorflow.keras.models import Model, load_model
 from tensorflow.keras.layers import LSTM, Dense, Input, AdditiveAttention, Flatten, Multiply
 from tensorflow.keras.callbacks import EarlyStopping
-from huggingface_hub import HfApi, HfFolder
-from huggingface_hub import login
-from huggingface_hub import create_repo, HfApi, HfFolder
-from transformers import TFAutoModel
+from huggingface_hub import HfApi
 import os
-import time
-import traceback
 import shutil
+import traceback
+import time
 
 # Hugging Face login
 hf_token = st.secrets["HF_TOKEN"]  # Store your Hugging Face token in Streamlit secrets
-login(token=hf_token)
 
 st.title("Stock Price Prediction")
 
@@ -58,61 +54,43 @@ def generate_prediction_dates(start_date, num_days):
         current_date += timedelta(days=1)
     return dates
 
-from huggingface_hub import HfApi, Repository
-import os
-import shutil
-
 def save_model_to_huggingface(model, model_name):
-    # Save the model locally first
-    model.save(model_name)
-    
     repo_id = "Finforbes/Stock_models"
     
-    # Clone the repository locally
-    local_dir = "Stock_models_repo"
     try:
-        repo = Repository(local_dir=local_dir, clone_from=repo_id, use_auth_token=hf_token)
-        st.success(f"Repository cloned: {repo_id}")
-    except Exception as e:
-        st.error(f"Error cloning repository: {str(e)}")
-        st.error(f"Detailed error: {traceback.format_exc()}")
-        return
-
-    # Copy the model to the cloned repository
-    try:
-        model_dir = os.path.join(local_dir, model_name)
-        if os.path.exists(model_dir):
-            shutil.rmtree(model_dir)
-        shutil.copytree(model_name, model_dir)
-    except Exception as e:
-        st.error(f"Error copying model to repository: {str(e)}")
-        st.error(f"Detailed error: {traceback.format_exc()}")
-        return
-
-    # Push the changes
-    try:
-        repo.git_add(auto_lfs_track=True)
-        repo.git_commit(f"Add/Update model: {model_name}")
-        repo.git_push()
+        # Save the model locally
+        model.save(model_name)
+        
+        # Upload the model files
+        api = HfApi()
+        api.upload_folder(
+            folder_path=model_name,
+            repo_id=repo_id,
+            repo_type="model",
+            ignore_patterns=["*.h5"],
+        )
         st.success(f"Model uploaded to Hugging Face: {repo_id}/{model_name}")
     except Exception as e:
-        st.error(f"Error pushing changes to Hugging Face: {str(e)}")
+        st.error(f"Error saving model to Hugging Face: {str(e)}")
         st.error(f"Detailed error: {traceback.format_exc()}")
-
-    # Clean up local files
-    try:
-        shutil.rmtree(local_dir)
-        shutil.rmtree(model_name)
-        st.success(f"Local files cleaned up")
-    except Exception as e:
-        st.warning(f"Error cleaning up local files: {str(e)}")
+    finally:
+        # Clean up local files
+        if os.path.exists(model_name):
+            shutil.rmtree(model_name)
 
 def load_model_from_huggingface(model_name):
     try:
         repo_id = "Finforbes/Stock_models"
-        model = TFAutoModel.from_pretrained(f"{repo_id}/{model_name}", token=hf_token)
-        st.success(f"Model loaded from Hugging Face: {repo_id}/{model_name}")
-        return model
+        api = HfApi()
+        model_files = api.list_repo_files(repo_id=repo_id, repo_type="model")
+        if model_name in model_files:
+            api.hf_hub_download(repo_id=repo_id, filename=model_name, local_dir=".", repo_type="model")
+            model = load_model(model_name)
+            st.success(f"Model loaded from Hugging Face: {repo_id}/{model_name}")
+            return model
+        else:
+            st.warning(f"Model {model_name} not found in repository {repo_id}")
+            return None
     except Exception as e:
         st.error(f"Error loading model from Hugging Face: {e}")
         st.error(f"Detailed error: {traceback.format_exc()}")
@@ -130,6 +108,31 @@ def safe_download(company, start_date, end_date, max_retries=3, delay=5):
                 st.info(f"Retrying in {delay} seconds...")
                 time.sleep(delay)
     return None
+
+@st.cache_data
+def calculate_performance_metrics(model, X_test, y_test):
+    try:
+        y_pred = model.predict(X_test, batch_size=32)
+        mae = mean_absolute_error(y_test, y_pred)
+        rmse = mean_squared_error(y_test, y_pred, squared=False)
+        return mae, rmse
+    except Exception as e:
+        st.error(f"Error calculating performance metrics: {str(e)}")
+        return None, None
+
+@st.cache_data
+def make_predictions(model, X_latest, scaler, prediction_days):
+    try:
+        predicted_prices = []
+        current_batch = X_latest
+        for _ in range(prediction_days):
+            next_prediction = model.predict(current_batch, batch_size=1)
+            predicted_prices.append(scaler.inverse_transform(next_prediction)[0, 0])
+            current_batch = np.append(current_batch[:, 1:, :], next_prediction.reshape(1, 1, 1), axis=1)
+        return predicted_prices
+    except Exception as e:
+        st.error(f"Error during prediction: {str(e)}")
+        return None
     
 def run_model():
     st.info(f"Attempting to download data for {company} from {start_date} to {end_date}")
@@ -244,14 +247,10 @@ def run_model():
         st.error(f"Error during model evaluation: {str(e)}")
 
     # Alternative performance metrics
-    try:
-        y_pred = model.predict(X_test, batch_size=32)  # Add batch_size to reduce memory usage
-        mae = mean_absolute_error(y_test, y_pred)
-        rmse = mean_squared_error(y_test, y_pred, squared=False)
+    mae, rmse = calculate_performance_metrics(model, X_test, y_test)
+    if mae is not None and rmse is not None:
         st.write(f"Mean Absolute Error: {mae}")
         st.write(f"Root Mean Square Error: {rmse}")
-    except Exception as e:
-        st.error(f"Error calculating performance metrics: {str(e)}")
 
     # Continue with predictions
     try:
@@ -264,19 +263,15 @@ def run_model():
         X_latest = np.array([scaled_data[-factor:].reshape(factor)])
         X_latest = np.reshape(X_latest, (X_latest.shape[0], X_latest.shape[1], 1))
 
-        predicted_stock_price = model.predict(X_latest, batch_size=1)  # Add batch_size to reduce memory usage
+        predicted_stock_price = model.predict(X_latest, batch_size=1)
         predicted_stock_price = scaler.inverse_transform(predicted_stock_price)
 
         st.write("Predicted Price for the next day: ", predicted_stock_price[0][0])
 
-        predicted_prices = []
-        current_batch = scaled_data[-factor:].reshape(1, factor, 1)
-
-        for i in range(prediction_days):
-            next_prediction = model.predict(current_batch, batch_size=1)  # Add batch_size to reduce memory usage
-            next_prediction_reshaped = next_prediction.reshape(1, 1, 1)
-            current_batch = np.append(current_batch[:, 1:, :], next_prediction_reshaped, axis=1)
-            predicted_prices.append(scaler.inverse_transform(next_prediction)[0, 0])
+        predicted_prices = make_predictions(model, X_latest, scaler, prediction_days)
+        if predicted_prices is None:
+            st.error("Failed to make predictions.")
+            return
 
         last_date = prediction_data.index[-1]
         next_day = last_date + timedelta(days=1)
@@ -318,7 +313,6 @@ def run_model():
     except Exception as e:
         st.error(f"Error during prediction: {str(e)}")
 
-    # Add this at the end of the run_model function
     st.success("Prediction process completed!")
 
 if st.button("Run Prediction"):

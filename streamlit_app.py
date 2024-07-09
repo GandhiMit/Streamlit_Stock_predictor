@@ -85,7 +85,7 @@ def run_model():
     # components.html(tradingview_html, height=620, width=820)
 
     # Data Loader
-    data = yf.download(company, start=start, end=end)
+    data = yf.download(company, start=start_date, end=end_date)
 
     if data.isnull().sum().any():
         data.fillna(method="ffill", inplace=True)

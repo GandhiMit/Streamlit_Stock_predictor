@@ -16,7 +16,7 @@ from transformers import TFAutoModel
 import os
 
 # Hugging Face login
-hf_token = st.secrets["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"]  # Store your Hugging Face token in Streamlit secrets
+hf_token = st.secrets["HF_TOKEN"]  # Store your Hugging Face token in Streamlit secrets
 login(token=hf_token)
 
 st.title("Stock Price Prediction")

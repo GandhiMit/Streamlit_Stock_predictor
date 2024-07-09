@@ -109,7 +109,6 @@ def safe_download(company, start_date, end_date, max_retries=3, delay=5):
                 time.sleep(delay)
     return None
 
-@st.cache_data
 def calculate_performance_metrics(model, X_test, y_test):
     try:
         y_pred = model.predict(X_test, batch_size=32)
@@ -120,7 +119,6 @@ def calculate_performance_metrics(model, X_test, y_test):
         st.error(f"Error calculating performance metrics: {str(e)}")
         return None, None
 
-@st.cache_data
 def make_predictions(model, X_latest, scaler, prediction_days):
     try:
         predicted_prices = []
@@ -186,7 +184,7 @@ def run_model():
 
     model = Model(inputs=input_layer, outputs=output_layer)
     model.compile(optimizer="adam", loss="mean_squared_error")
-
+    
     early_stopping = EarlyStopping(monitor="val_loss", patience=10)
     
     progress_bar = st.progress(0)
@@ -201,7 +199,7 @@ def run_model():
     try:
         with st.spinner('Training the model...'):
             history = model.fit(
-                                X_train, y_train,
+                X_train, y_train,
                 epochs=100,
                 batch_size=25,
                 validation_split=0.2,
@@ -227,40 +225,24 @@ def run_model():
     except Exception as e:
         st.error(f"Error during model evaluation: {str(e)}")
 
-    # Alternative performance metrics
     mae, rmse = calculate_performance_metrics(model, X_test, y_test)
     if mae is not None and rmse is not None:
         st.write(f"Mean Absolute Error: {mae}")
         st.write(f"Root Mean Square Error: {rmse}")
 
-    # Continue with predictions
+    X_latest = scaled_data[-factor:]
+    X_latest = np.reshape(X_latest, (1, X_latest.shape[0], 1))
+
+    prediction_dates = generate_prediction_dates(end_date + timedelta(days=1), prediction_days)
+    predicted_prices = make_predictions(model, X_latest, scaler, prediction_days)
+    if predicted_prices is None:
+        st.error("Prediction failed. Please check the model and try again.")
+        return
+
     prediction_data = safe_download(company, start_date_prediction, end_date_prediction)
     if prediction_data is None or prediction_data.empty:
         st.error("Failed to download prediction data. Please try again later or check your internet connection.")
         return
-    
-    st.write("Latest Stock/Crypto Data for Prediction")
-    st.write(prediction_data.tail())
-
-    closing_prices = prediction_data[price_type].values
-    scaled_data = scaler.fit_transform(closing_prices.reshape(-1, 1))
-    X_latest = np.array([scaled_data[-factor:].reshape(factor)])
-    X_latest = np.reshape(X_latest, (X_latest.shape[0], X_latest.shape[1], 1))
-
-    predicted_stock_price = model.predict(X_latest, batch_size=1)
-    predicted_stock_price = scaler.inverse_transform(predicted_stock_price)
-
-    st.write("Predicted Price for the next day: ", predicted_stock_price[0][0])
-
-    predicted_prices = make_predictions(model, X_latest, scaler, prediction_days)
-    if predicted_prices is None:
-        st.error("Failed to make predictions.")
-        return
-
-    last_date = prediction_data.index[-1]
-    next_day = last_date + timedelta(days=1)
-    prediction_dates = generate_prediction_dates(next_day, prediction_days)
-    predictions_df = pd.DataFrame(index=prediction_dates, data=predicted_prices, columns=[price_type])
 
     plt.figure(figsize=(12, 6))
     plt.plot(prediction_data.index[-factor:], prediction_data[price_type][-factor:], linestyle="-", marker="o", color="blue", label="Actual Data")
@@ -294,9 +276,6 @@ def run_model():
     plt.tight_layout()
     st.pyplot(plt)
 
-    st.success("Prediction process completed!")
-
 if st.button("Run Prediction"):
     with st.spinner('Processing...'):
         run_model()
-

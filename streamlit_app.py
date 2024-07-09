@@ -1,4 +1,5 @@
 import streamlit as st
+st.write("started")
 import pandas as pd
 import numpy as np
 import yfinance as yf

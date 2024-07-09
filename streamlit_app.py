@@ -75,16 +75,33 @@ def load_model_from_huggingface(model_name):
     except Exception as e:
         st.error(f"Error loading model from Hugging Face: {e}")
         return None
-
+def safe_download(company, start_date, end_date, max_retries=3, delay=5):
+    for attempt in range(max_retries):
+        try:
+            data = yf.download(company, start=start_date, end=end_date, progress=False)
+            if not data.empty:
+                return data
+        except Exception as e:
+            st.warning(f"Attempt {attempt + 1} failed: {str(e)}")
+            if attempt < max_retries - 1:
+                st.info(f"Retrying in {delay} seconds...")
+                time.sleep(delay)
+    return None
+    
 def run_model():
-    # Data Loader
-    data = yf.download(company, start=start_date, end=end_date)
-
-    if data.empty:
-        st.error("No data available for the selected company and date range.")
+    st.info(f"Attempting to download data for {company} from {start_date} to {end_date}")
+    
+    data = safe_download(company, start_date, end_date)
+    
+    if data is None or data.empty:
+        st.error("Failed to download data after multiple attempts. Please try again later or check your internet connection.")
         return
+    
+    st.success("Data downloaded successfully!")
+    st.write(data.head())
 
     if data.isnull().sum().any():
+        st.warning("Data contains null values. Filling with forward fill method.")
         data.fillna(method="ffill", inplace=True)
 
     scaler = MinMaxScaler(feature_range=(0, 1))

@@ -14,6 +14,7 @@ from huggingface_hub import HfApi, HfFolder
 from huggingface_hub import login
 from transformers import TFAutoModel
 import os
+import time
 
 # Hugging Face login
 hf_token = st.secrets["HF_TOKEN"]  # Store your Hugging Face token in Streamlit secrets
@@ -58,23 +59,31 @@ def save_model_to_huggingface(model, model_name):
     # Save the model locally first
     model.save(model_name)
     
+    # Modify the repo_id format
+    repo_id = f"Finforbes/{model_name}"
+    
     # Upload the model to Hugging Face
-    api = HfApi()
-    api.upload_folder(
-        folder_path=model_name,
-        repo_id=f"Finforbes/Stock_predictor/{model_name}",
-        repo_type="model",
-    )
-    st.success(f"Model uploaded to Hugging Face: your-huggingface-username/{model_name}")
+    try:
+        api = HfApi()
+        api.upload_folder(
+            folder_path=model_name,
+            repo_id=repo_id,
+            repo_type="model",
+        )
+        st.success(f"Model uploaded to Hugging Face: {repo_id}")
+    except Exception as e:
+        st.error(f"Error uploading model to Hugging Face: {str(e)}")
 
 def load_model_from_huggingface(model_name):
     try:
-        model = TFAutoModel.from_pretrained(f"Finforbes/Stock_predictor/{model_name}")
-        st.success(f"Model loaded from Hugging Face: Finforbes/Stock_predictor/{model_name}")
+        repo_id = f"Finforbes/{model_name}"
+        model = TFAutoModel.from_pretrained(repo_id)
+        st.success(f"Model loaded from Hugging Face: {repo_id}")
         return model
     except Exception as e:
         st.error(f"Error loading model from Hugging Face: {e}")
         return None
+
 def safe_download(company, start_date, end_date, max_retries=3, delay=5):
     for attempt in range(max_retries):
         try:
@@ -99,28 +108,28 @@ def run_model():
     
     st.success("Data downloaded successfully!")
     st.write(data.head())
-    
+
     if data.isnull().sum().any():
         st.warning("Data contains null values. Filling with forward fill method.")
         data.fillna(method="ffill", inplace=True)
-    
+
     scaler = MinMaxScaler(feature_range=(0, 1))
     scaled_data = scaler.fit_transform(data[price_type].values.reshape(-1, 1))
-    
+
     X, y = [], []
     for i in range(factor, len(scaled_data)):
         X.append(scaled_data[i - factor: i, 0])
         y.append(scaled_data[i, 0])
-    
+
     X, y = np.array(X), np.array(y)
-    
+
     train_size = int(len(X) * 0.8)
     X_train, X_test = X[:train_size], X[train_size:]
     y_train, y_test = y[:train_size], y[train_size:]
-    
+
     X_train = np.reshape(X_train, (X_train.shape[0], X_train.shape[1], 1))
     X_test = np.reshape(X_test, (X_test.shape[0], X_test.shape[1], 1))
-    
+
     model_name = f"{company}_model_PT_{price_type}"
     
     model = None
@@ -131,21 +140,21 @@ def run_model():
     except Exception as e:
         st.error(f"Error loading model from Hugging Face: {str(e)}")
         st.info("Creating a new model...")
-    
+
     if model is None:
         input_layer = Input(shape=(X_train.shape[1], 1))
         lstm_out = LSTM(50, return_sequences=True)(input_layer)
         lstm_out = LSTM(50, return_sequences=True)(lstm_out)
-    
+
         query = Dense(50)(lstm_out)
         value = Dense(50)(lstm_out)
         attention_out = AdditiveAttention()([query, value])
-    
+
         multiply_layer = Multiply()([lstm_out, attention_out])
-    
+
         flatten_layer = Flatten()(multiply_layer)
         output_layer = Dense(1)(flatten_layer)
-    
+
         model = Model(inputs=input_layer, outputs=output_layer)
         model.compile(optimizer="adam", loss="mean_squared_error")
         
@@ -157,18 +166,18 @@ def run_model():
                 st.text("\n".join(summary_string))
         except Exception as e:
             st.warning(f"Unable to print model summary: {str(e)}")
-    
+
         early_stopping = EarlyStopping(monitor="val_loss", patience=10)
         
         progress_bar = st.progress(0)
         status_text = st.empty()
-    
+
         class StreamlitCallback(tf.keras.callbacks.Callback):
             def on_epoch_end(self, epoch, logs=None):
                 progress = (epoch + 1) / 100
                 progress_bar.progress(progress)
                 status_text.text(f"Training progress: {int(progress * 100)}%")
-    
+
         try:
             with st.spinner('Training the model...'):
                 history = model.fit(
@@ -183,84 +192,97 @@ def run_model():
         except Exception as e:
             st.error(f"Error during model training: {str(e)}")
             return
-    
+
         if save_model:
             try:
                 save_model_to_huggingface(model, model_name)
             except Exception as e:
                 st.error(f"Error saving model to Hugging Face: {str(e)}")
-            
-    test_loss = model.evaluate(X_test, y_test)
-    y_pred = model.predict(X_test)
 
-    mae = mean_absolute_error(y_test, y_pred)
-    rmse = mean_squared_error(y_test, y_pred, squared=False)
+    # Model evaluation
+    try:
+        with st.spinner('Evaluating model...'):
+            test_loss = model.evaluate(X_test, y_test, verbose=0)
+        st.success(f"Test Loss: {test_loss}")
+    except Exception as e:
+        st.error(f"Error during model evaluation: {str(e)}")
+        st.warning("Proceeding with predictions without evaluation metrics.")
 
-    st.subheader("Model Evaluation")
-    st.write(f"Test Loss: {test_loss}")
-    st.write(f"Mean Absolute Error: {mae}")
-    st.write(f"Root Mean Square Error: {rmse}")
+    # Alternative performance metrics
+    try:
+        y_pred = model.predict(X_test)
+        mae = mean_absolute_error(y_test, y_pred)
+        rmse = mean_squared_error(y_test, y_pred, squared=False)
+        st.write(f"Mean Absolute Error: {mae}")
+        st.write(f"Root Mean Square Error: {rmse}")
+    except Exception as e:
+        st.error(f"Error calculating performance metrics: {str(e)}")
 
-    prediction_data = safe_download(company, start_date_prediction, end_date_prediction)
-    st.write("Latest Stock/Crypto Data for Prediction")
-    st.write(prediction_data.tail())
+    # Continue with predictions
+    try:
+        prediction_data = safe_download(company, start_date_prediction, end_date_prediction)
+        st.write("Latest Stock/Crypto Data for Prediction")
+        st.write(prediction_data.tail())
 
-    closing_prices = prediction_data[price_type].values
-    scaled_data = scaler.fit_transform(closing_prices.reshape(-1, 1))
-    X_latest = np.array([scaled_data[-factor:].reshape(factor)])
-    X_latest = np.reshape(X_latest, (X_latest.shape[0], X_latest.shape[1], 1))
+        closing_prices = prediction_data[price_type].values
+        scaled_data = scaler.fit_transform(closing_prices.reshape(-1, 1))
+        X_latest = np.array([scaled_data[-factor:].reshape(factor)])
+        X_latest = np.reshape(X_latest, (X_latest.shape[0], X_latest.shape[1], 1))
 
-    predicted_stock_price = model.predict(X_latest)
-    predicted_stock_price = scaler.inverse_transform(predicted_stock_price)
+        predicted_stock_price = model.predict(X_latest)
+        predicted_stock_price = scaler.inverse_transform(predicted_stock_price)
 
-    st.write("Predicted Price for the next day: ", predicted_stock_price[0][0])
+        st.write("Predicted Price for the next day: ", predicted_stock_price[0][0])
 
-    predicted_prices = []
-    current_batch = scaled_data[-factor:].reshape(1, factor, 1)
+        predicted_prices = []
+        current_batch = scaled_data[-factor:].reshape(1, factor, 1)
 
-    for i in range(prediction_days):
-        next_prediction = model.predict(current_batch)
-        next_prediction_reshaped = next_prediction.reshape(1, 1, 1)
-        current_batch = np.append(current_batch[:, 1:, :], next_prediction_reshaped, axis=1)
-        predicted_prices.append(scaler.inverse_transform(next_prediction)[0, 0])
+        for i in range(prediction_days):
+            next_prediction = model.predict(current_batch)
+            next_prediction_reshaped = next_prediction.reshape(1, 1, 1)
+            current_batch = np.append(current_batch[:, 1:, :], next_prediction_reshaped, axis=1)
+            predicted_prices.append(scaler.inverse_transform(next_prediction)[0, 0])
 
-    last_date = prediction_data.index[-1]
-    next_day = last_date + timedelta(days=1)
-    prediction_dates = generate_prediction_dates(next_day, prediction_days)
-    predictions_df = pd.DataFrame(index=prediction_dates, data=predicted_prices, columns=[price_type])
+        last_date = prediction_data.index[-1]
+        next_day = last_date + timedelta(days=1)
+        prediction_dates = generate_prediction_dates(next_day, prediction_days)
+        predictions_df = pd.DataFrame(index=prediction_dates, data=predicted_prices, columns=[price_type])
 
-    plt.figure(figsize=(12, 6))
-    plt.plot(prediction_data.index[-factor:], prediction_data[price_type][-factor:], linestyle="-", marker="o", color="blue", label="Actual Data")
-    plt.plot(prediction_dates, predicted_prices, linestyle="-", marker="o", color="red", label="Predicted Data")
+        plt.figure(figsize=(12, 6))
+        plt.plot(prediction_data.index[-factor:], prediction_data[price_type][-factor:], linestyle="-", marker="o", color="blue", label="Actual Data")
+        plt.plot(prediction_dates, predicted_prices, linestyle="-", marker="o", color="red", label="Predicted Data")
 
-    for i, price in enumerate(prediction_data[price_type][-factor:]):
-        plt.annotate(f'{price:.2f}', (prediction_data.index[-factor:][i], price), textcoords="offset points", xytext=(0, 10), ha='center')
+        for i, price in enumerate(prediction_data[price_type][-factor:]):
+            plt.annotate(f'{price:.2f}', (prediction_data.index[-factor:][i], price), textcoords="offset points", xytext=(0, 10), ha='center')
 
-    for i, price in enumerate(predicted_prices):
-        plt.annotate(f'{price:.2f}', (prediction_dates[i], price), textcoords="offset points", xytext=(0, 10), ha='center')
+        for i, price in enumerate(predicted_prices):
+            plt.annotate(f'{price:.2f}', (prediction_dates[i], price), textcoords="offset points", xytext=(0, 10), ha='center')
 
-    plt.title(f"{company} Price: Last {factor} Days and Next {prediction_days} Days Predicted")
-    plt.xlabel("Date")
-    plt.ylabel("Price")
-    plt.legend()
-    plt.xticks(rotation=45)
-    plt.tight_layout()
-    st.pyplot(plt)
+        plt.title(f"{company} Price: Last {factor} Days and Next {prediction_days} Days Predicted")
+        plt.xlabel("Date")
+        plt.ylabel("Price")
+        plt.legend()
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        st.pyplot(plt)
 
-    plt.figure(figsize=(12, 6))
-    plt.plot(prediction_dates, predicted_prices, linestyle="-", marker="o", color="red", label="Predicted Data")
+        plt.figure(figsize=(12, 6))
+        plt.plot(prediction_dates, predicted_prices, linestyle="-", marker="o", color="red", label="Predicted Data")
 
-    for i, price in enumerate(predicted_prices):
-        plt.annotate(f'{price:.2f}', (prediction_dates[i], price), textcoords="offset points", xytext=(0, 10), ha='center')
+        for i, price in enumerate(predicted_prices):
+            plt.annotate(f'{price:.2f}', (prediction_dates[i], price), textcoords="offset points", xytext=(0, 10), ha='center')
 
-    plt.title(f"{company} Predicted Prices for Next {prediction_days} Days")
-    plt.xlabel("Date")
-    plt.ylabel("Predicted Price")
-    plt.legend()
-    plt.xticks(rotation=45)
-    plt.tight_layout()
-    st.pyplot(plt)
+        plt.title(f"{company} Predicted Prices for Next {prediction_days} Days")
+        plt.xlabel("Date")
+        plt.ylabel("Predicted Price")
+        plt.legend()
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        st.pyplot(plt)
+
+    except Exception as e:
+        st.error(f"Error during prediction: {str(e)}")
 
 if st.button("Run Prediction"):
-    with st.spinner('Training the model...'):
+    with st.spinner('Processing...'):
         run_model()

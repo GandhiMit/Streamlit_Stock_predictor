@@ -16,6 +16,7 @@ from huggingface_hub import create_repo, HfApi, HfFolder
 from transformers import TFAutoModel
 import os
 import time
+import traceback
 
 # Hugging Face login
 hf_token = st.secrets["HF_TOKEN"]  # Store your Hugging Face token in Streamlit secrets
@@ -56,34 +57,42 @@ def generate_prediction_dates(start_date, num_days):
         current_date += timedelta(days=1)
     return dates
 
-
-
 def save_model_to_huggingface(model, model_name):
     # Save the model locally first
     model.save(model_name)
     
-    # Use the existing repository
     repo_id = "Finforbes/Stock_predictor"
+    
+    # Try to create the repository (this will do nothing if it already exists)
+    try:
+        create_repo(repo_id, repo_type="model", token=hf_token)
+        st.success(f"Repository created or already exists: {repo_id}")
+    except Exception as e:
+        st.warning(f"Repository creation failed (it might already exist): {str(e)}")
     
     # Upload the model to Hugging Face
     try:
-        api = HfApi()
+        api = HfApi(token=hf_token)
         api.upload_folder(
             folder_path=model_name,
             repo_id=repo_id,
             repo_type="model",
+            token=hf_token
         )
         st.success(f"Model uploaded to Hugging Face: {repo_id}")
     except Exception as e:
         st.error(f"Error uploading model to Hugging Face: {str(e)}")
+        st.error(f"Detailed error: {traceback.format_exc()}")
+
 def load_model_from_huggingface(model_name):
     try:
         repo_id = "Finforbes/Stock_predictor"
-        model = TFAutoModel.from_pretrained(f"{repo_id}/{model_name}")
+        model = TFAutoModel.from_pretrained(f"{repo_id}/{model_name}", token=hf_token)
         st.success(f"Model loaded from Hugging Face: {repo_id}/{model_name}")
         return model
     except Exception as e:
         st.error(f"Error loading model from Hugging Face: {e}")
+        st.error(f"Detailed error: {traceback.format_exc()}")
         return None
 
 def safe_download(company, start_date, end_date, max_retries=3, delay=5):
@@ -138,10 +147,12 @@ def run_model():
     try:
         st.info(f"Attempting to load model from Hugging Face: {model_name}")
         model = load_model_from_huggingface(model_name)
+        if model is None:
+            raise Exception("Model not found or failed to load")
         st.success("Model loaded successfully from Hugging Face")
     except Exception as e:
-        st.error(f"Error loading model from Hugging Face: {str(e)}")
-        st.info("Creating a new model...")
+        st.warning(f"Could not load existing model: {str(e)}. Creating a new one.")
+        model = None
 
     if model is None:
         input_layer = Input(shape=(X_train.shape[1], 1))
@@ -244,9 +255,6 @@ def run_model():
             current_batch = np.append(current_batch[:, 1:, :], next_prediction_reshaped, axis=1)
             predicted_prices.append(scaler.inverse_transform(next_prediction)[0, 0])
 
-      
-
-  
         last_date = prediction_data.index[-1]
         next_day = last_date + timedelta(days=1)
         prediction_dates = generate_prediction_dates(next_day, prediction_days)

@@ -9,7 +9,7 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error
 import tensorflow as tf
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import LSTM, Dense, Input, AdditiveAttention, Flatten, Multiply
-from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.callbacks import EarlyStopping, TerminateOnNaN
 import traceback
 import time
 
@@ -62,7 +62,7 @@ def safe_download(company, start_date, end_date, max_retries=3, delay=5):
 
 def calculate_performance_metrics(model, X_test, y_test):
     try:
-        y_pred = model.predict(X_test, batch_size=32)
+        y_pred = model.predict(X_test, batch_size=factor)
         mae = mean_absolute_error(y_test, y_pred)
         rmse = mean_squared_error(y_test, y_pred, squared=False)
         return mae, rmse
@@ -133,7 +133,8 @@ def run_model():
     model.compile(optimizer="adam", loss="mean_squared_error")
     
     early_stopping = EarlyStopping(monitor="val_loss", patience=10)
-    
+    terminate_on_nan = TerminateOnNaN()
+
     progress_bar = st.progress(0)
     status_text = st.empty()
 
@@ -148,9 +149,9 @@ def run_model():
             history = model.fit(
                 X_train, y_train,
                 epochs=100,
-                batch_size=25,
+                batch_size=factor,
                 validation_split=0.2,
-                callbacks=[early_stopping, StreamlitCallback()],
+                callbacks=[early_stopping, terminate_on_nan, StreamlitCallback()],
                 verbose=0
             )
         st.success("Model training completed successfully!")
@@ -159,7 +160,7 @@ def run_model():
         return
 
     try:
-        test_loss = model.evaluate(X_test, y_test, verbose=0)
+        test_loss = model.evaluate(X_test, y_test, batch_size=factor, verbose=0)
         st.success(f"Test Loss: {test_loss}")
     except Exception as e:
         st.error(f"Error during model evaluation: {str(e)}")
@@ -187,6 +188,7 @@ def run_model():
     plt.plot(prediction_data.index[-factor:], prediction_data[price_type][-factor:], linestyle="-", marker="o", color="blue", label="Actual Data")
     plt.plot(prediction_dates, predicted_prices, linestyle="-", marker="o", color="red", label="Predicted Data")
 
+   
     for i, price in enumerate(prediction_data[price_type][-factor:]):
         plt.annotate(f'{price:.2f}', (prediction_data.index[-factor:][i], price), textcoords="offset points", xytext=(0, 10), ha='center')
 

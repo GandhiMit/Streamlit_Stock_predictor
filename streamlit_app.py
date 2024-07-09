@@ -12,6 +12,7 @@ from tensorflow.keras.layers import LSTM, Dense, Input, AdditiveAttention, Flatt
 from tensorflow.keras.callbacks import EarlyStopping
 from huggingface_hub import HfApi, HfFolder
 from huggingface_hub import login
+from huggingface_hub import create_repo, HfApi, HfFolder
 from transformers import TFAutoModel
 import os
 import time
@@ -55,12 +56,21 @@ def generate_prediction_dates(start_date, num_days):
         current_date += timedelta(days=1)
     return dates
 
+
+
 def save_model_to_huggingface(model, model_name):
     # Save the model locally first
     model.save(model_name)
     
     # Modify the repo_id format
     repo_id = f"Finforbes/{model_name}"
+    
+    # Create the repository if it doesn't exist
+    try:
+        create_repo(repo_id, repo_type="model", token=hf_token)
+        st.success(f"Created new repository: {repo_id}")
+    except Exception as e:
+        st.warning(f"Repository creation failed (it might already exist): {str(e)}")
     
     # Upload the model to Hugging Face
     try:
@@ -206,11 +216,10 @@ def run_model():
         st.success(f"Test Loss: {test_loss}")
     except Exception as e:
         st.error(f"Error during model evaluation: {str(e)}")
-        st.warning("Proceeding with predictions without evaluation metrics.")
 
     # Alternative performance metrics
     try:
-        y_pred = model.predict(X_test)
+        y_pred = model.predict(X_test, batch_size=32)  # Add batch_size to reduce memory usage
         mae = mean_absolute_error(y_test, y_pred)
         rmse = mean_squared_error(y_test, y_pred, squared=False)
         st.write(f"Mean Absolute Error: {mae}")
@@ -229,7 +238,7 @@ def run_model():
         X_latest = np.array([scaled_data[-factor:].reshape(factor)])
         X_latest = np.reshape(X_latest, (X_latest.shape[0], X_latest.shape[1], 1))
 
-        predicted_stock_price = model.predict(X_latest)
+        predicted_stock_price = model.predict(X_latest, batch_size=1)  # Add batch_size to reduce memory usage
         predicted_stock_price = scaler.inverse_transform(predicted_stock_price)
 
         st.write("Predicted Price for the next day: ", predicted_stock_price[0][0])
@@ -238,10 +247,18 @@ def run_model():
         current_batch = scaled_data[-factor:].reshape(1, factor, 1)
 
         for i in range(prediction_days):
-            next_prediction = model.predict(current_batch)
+            next_prediction = model.predict(current_batch, batch_size=1)  # Add batch_size to reduce memory usage
             next_prediction_reshaped = next_prediction.reshape(1, 1, 1)
             current_batch = np.append(current_batch[:, 1:, :], next_prediction_reshaped, axis=1)
             predicted_prices.append(scaler.inverse_transform(next_prediction)[0, 0])
+
+        # ... (rest of the plotting code remains the same)
+
+    except Exception as e:
+        st.error(f"Error during prediction: {str(e)}")
+
+    # Add this at the end of the run_model function
+    st.success("Prediction process completed!")
 
         last_date = prediction_data.index[-1]
         next_day = last_date + timedelta(days=1)
@@ -280,8 +297,11 @@ def run_model():
         plt.tight_layout()
         st.pyplot(plt)
 
-    except Exception as e:
+      except Exception as e:
         st.error(f"Error during prediction: {str(e)}")
+
+    # Add this at the end of the run_model function
+    st.success("Prediction process completed!")
 
 if st.button("Run Prediction"):
     with st.spinner('Processing...'):

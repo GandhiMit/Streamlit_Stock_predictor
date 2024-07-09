@@ -16,7 +16,7 @@ from transformers import TFAutoModel
 import os
 
 # Hugging Face login
-hf_token = st.secrets["HF_TOKEN"]  # Store your Hugging Face token in Streamlit secrets
+hf_token = st.secrets["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"]  # Store your Hugging Face token in Streamlit secrets
 login(token=hf_token)
 
 st.title("Stock Price Prediction")
@@ -62,15 +62,15 @@ def save_model_to_huggingface(model, model_name):
     api = HfApi()
     api.upload_folder(
         folder_path=model_name,
-        repo_id=f"your-huggingface-username/{model_name}",
+        repo_id=f"Finforbes/Stock_predictor/{model_name}",
         repo_type="model",
     )
     st.success(f"Model uploaded to Hugging Face: your-huggingface-username/{model_name}")
 
 def load_model_from_huggingface(model_name):
     try:
-        model = TFAutoModel.from_pretrained(f"your-huggingface-username/{model_name}")
-        st.success(f"Model loaded from Hugging Face: your-huggingface-username/{model_name}")
+        model = TFAutoModel.from_pretrained(f"Finforbes/Stock_predictor/{model_name}")
+        st.success(f"Model loaded from Hugging Face: Finforbes/Stock_predictor/{model_name}")
         return model
     except Exception as e:
         st.error(f"Error loading model from Hugging Face: {e}")

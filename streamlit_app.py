@@ -122,35 +122,44 @@ def run_model():
     X_test = np.reshape(X_test, (X_test.shape[0], X_test.shape[1], 1))
 
     model_name = f"{company}_model_PT_{price_type}"
-    
-    # Try to load the model from Hugging Face
-    model = load_model_from_huggingface(model_name)
+    model = None
+    try:
+        model = load_model_from_huggingface(model_name)
+    except Exception as e:
+        st.error(f"Error loading model from Hugging Face: {str(e)}")
     
     if model is None:
         # If the model doesn't exist on Hugging Face, create and train a new one
         input_layer = Input(shape=(X_train.shape[1], 1))
         lstm_out = LSTM(50, return_sequences=True)(input_layer)
         lstm_out = LSTM(50, return_sequences=True)(lstm_out)
-
+    
         query = Dense(50)(lstm_out)
         value = Dense(50)(lstm_out)
         attention_out = AdditiveAttention()([query, value])
-
+    
         multiply_layer = Multiply()([lstm_out, attention_out])
-
+    
         flatten_layer = Flatten()(multiply_layer)
         output_layer = Dense(1)(flatten_layer)
-
+    
         model = Model(inputs=input_layer, outputs=output_layer)
         model.compile(optimizer="adam", loss="mean_squared_error")
-        model.summary()
-
+        
+        try:
+            model.summary()
+        except Exception as e:
+            st.warning(f"Unable to print model summary: {str(e)}")
+    
         early_stopping = EarlyStopping(monitor="val_loss", patience=10)
         history = model.fit(X_train, y_train, epochs=100, batch_size=25, validation_split=0.2,
                             callbacks=[early_stopping])
-
+    
         if save_model:
-            save_model_to_huggingface(model, model_name)
+            try:
+                save_model_to_huggingface(model, model_name)
+            except Exception as e:
+                st.error(f"Error saving model to Hugging Face: {str(e)}")
 
     test_loss = model.evaluate(X_test, y_test)
     y_pred = model.predict(X_test)
